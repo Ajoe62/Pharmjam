@@ -31,7 +31,30 @@ yarn-error.*
 *.pem
 
 # local env files
+.env
 .env*.local
+.env.production
+.env.development
+
+# SENSITIVE FILES - NEVER COMMIT THESE
+# Supabase credentials and API keys
+lib/supabase.ts
+supabase-config.json
+supabase-keys.json
+lib/supabase.ts.backup
+config/secrets.ts
+auth/credentials.json
+
+# Any files containing passwords, tokens, or API keys
+*secret*
+*credential*
+*password*
+*token*
+*api-key*
+
+# Log files
+logs/
+*.log
 
 # typescript
 *.tsbuildinfo
