@@ -9,13 +9,50 @@
     "web": "expo start --web"
   },
   "dependencies": {
-    "expo": "~53.0.17",
+    "@expo/metro-runtime": "~5.0.4",
+    "@react-native-async-storage/async-storage": "^2.1.2",
+    "@react-native-community/datetimepicker": "^8.4.1",
+    "@react-navigation/native": "^7.1.14",
+    "@react-navigation/stack": "^7.4.2",
+    "@react-stately/collections": "^3.12.5",
+    "@supabase/supabase-js": "^2.50.5",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "expo": "53.0.19",
+    "expo-camera": "~16.1.10",
+    "expo-document-picker": "^13.1.6",
+    "expo-file-system": "^18.1.11",
+    "expo-sharing": "^13.1.5",
+    "expo-sqlite": "~15.2.14",
     "expo-status-bar": "~2.2.3",
+    "lucide-react-native": "^0.525.0",
+    "native-base": "^3.4.28",
+    "nativewind": "^4.1.23",
+    "normalize-css-color": "^1.0.2",
     "react": "19.0.0",
-    "react-native": "0.79.5"
+    "react-dom": "19.0.0",
+    "react-native": "0.79.5",
+    "react-native-gesture-handler": "~2.24.0",
+    "react-native-modal": "^14.0.0-rc.1",
+    "react-native-reanimated": "~3.17.4",
+    "react-native-safe-area-context": "5.4.0",
+    "react-native-screens": "^4.11.1",
+    "react-native-super-grid": "^6.0.1",
+    "react-native-svg": "15.11.2",
+    "react-native-url-polyfill": "^2.0.0",
+    "react-native-vector-icons": "^10.2.0",
+    "react-native-web": "^0.20.0",
+    "tailwind-merge": "^3.3.1"
   },
   "devDependencies": {
-    "@babel/core": "^7.20.0"
+    "@babel/core": "^7.20.0",
+    "@types/react": "~19.0.10",
+    "babel-preset-expo": "~13.0.0",
+    "tailwindcss": "^3.4.17",
+    "typescript": "~5.8.3"
+  },
+  "overrides": {
+    "lodash.pick": "4.4.0"
   },
   "private": true
 }
