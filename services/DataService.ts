@@ -22,17 +22,25 @@ export class DataService {
 
   // Initialize the data service
   async initialize(): Promise<void> {
-    if (this.initialized) return;
+    if (this.initialized) {
+      console.log("⏸️ [DEBUG] DataService: Already initialized, skipping...");
+      return;
+    }
 
     try {
-      console.log("🚀 Initializing Unified Data Service...");
+      console.log("🚀 [DEBUG] DataService: Starting initialization...");
+      console.log("🚀 [DEBUG] DataService: LocalDB instance:", !!this.localDB);
+      console.log("🚀 [DEBUG] DataService: SupabaseService instance:", !!this.supabaseService);
 
       // Always initialize local database first (offline-first)
       try {
+        console.log("🗄️ [DEBUG] DataService: Initializing local database...");
         await this.localDB.initialize();
-        console.log("✅ Local database initialized successfully");
+        console.log("✅ [DEBUG] DataService: Local database initialized successfully");
+        console.log("✅ [DEBUG] DataService: Local database isInitialized:", this.localDB.isInitialized());
       } catch (dbError) {
-        console.error("❌ Local database initialization failed:", dbError);
+        console.error("❌ [DEBUG] DataService: Local database initialization failed:", dbError);
+        console.error("❌ [DEBUG] DataService: DB error stack:", (dbError as Error).stack);
         // Critical error - throw to trigger fallback to SimpleDataService
         throw new Error(
           "Local database unavailable: " + (dbError as Error).message
@@ -41,25 +49,30 @@ export class DataService {
 
       // Try to initialize Supabase connection
       try {
+        console.log("🌐 [DEBUG] DataService: Checking Supabase connection...");
         // supabaseService is already initialized as a singleton
         this.isOnline = true;
-        console.log("✅ Supabase connection available");
+        console.log("✅ [DEBUG] DataService: Supabase connection available");
       } catch (error) {
-        console.warn(
-          "⚠️ Supabase connection failed, continuing in offline mode"
-        );
+        console.warn("⚠️ [DEBUG] DataService: Supabase connection failed, continuing in offline mode");
+        console.warn("⚠️ [DEBUG] DataService: Supabase error:", error);
         this.isOnline = false;
       }
 
       this.initialized = true;
-      console.log("✅ Unified Data Service initialized successfully");
+      console.log("✅ [DEBUG] DataService: Marked as initialized");
+      console.log("✅ [DEBUG] DataService: Final state - initialized:", this.initialized, "online:", this.isOnline);
 
       // Only start background sync if fully initialized and online
       if (this.isOnline) {
+        console.log("🔄 [DEBUG] DataService: Starting background sync...");
         this.startBackgroundSync();
+      } else {
+        console.log("📴 [DEBUG] DataService: Offline mode - no background sync");
       }
     } catch (error) {
-      console.error("❌ Data Service initialization failed:", error);
+      console.error("❌ [DEBUG] DataService: Initialization failed:", error);
+      console.error("❌ [DEBUG] DataService: Error stack:", (error as Error).stack);
       this.initialized = false;
       // Throw error to trigger fallback to SimpleDataService
       throw error;

@@ -1,7 +1,7 @@
 // contexts/DataServiceContext.tsx
 // Context provider for the unified data service
 
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from "react";
 import { dataService } from "../services/DataService";
 import { simpleDataService } from "../services/SimpleDataService";
 import { Product, InventoryItem, Sale } from "../types";
@@ -19,6 +19,7 @@ interface DataServiceContextType {
   };
   loading: boolean;
   initialized: boolean;
+  error: string | null;
 
   // Actions
   refreshData: () => Promise<void>;
@@ -34,6 +35,7 @@ interface DataServiceContextType {
   searchProducts: (query: string) => Promise<Product[]>;
   searchInventory: (query: string) => Promise<InventoryItem[]>;
   forceSync: () => Promise<{ success: boolean; error?: string }>;
+  clearError: () => void;
 
   // Data service instance (for advanced usage)
   dataService: typeof dataService | typeof simpleDataService;
@@ -68,79 +70,73 @@ export function DataServiceProvider({ children }: DataServiceProviderProps) {
   });
   const [loading, setLoading] = useState(false);
   const [initialized, setInitialized] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  
+  // Use refs to track intervals and prevent memory leaks
+  const syncStatusIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const initializationAttemptedRef = useRef(false);
 
-  useEffect(() => {
-    // Only initialize once
-    if (!initialized && !loading) {
-      initializeDataService();
+  // Clear error function
+  const clearError = useCallback(() => {
+    setError(null);
+  }, []);
+
+  // Cleanup function
+  const cleanup = useCallback(() => {
+    if (syncStatusIntervalRef.current) {
+      clearInterval(syncStatusIntervalRef.current);
+      syncStatusIntervalRef.current = null;
+    }
+    
+    if (currentDataService && typeof currentDataService.cleanup === "function") {
+      currentDataService.cleanup();
+    }
+  }, [currentDataService]);
+
+  // Initialize data service only once
+  const initializeDataService = useCallback(async () => {
+    // Prevent multiple initialization attempts
+    if (initializationAttemptedRef.current || initialized) {
+      console.log("⏸️ [DEBUG] DataService initialization already attempted/completed");
+      return;
     }
 
-    // Update sync status periodically, but only if initialized
-    const syncStatusInterval = setInterval(() => {
-      if (initialized && currentDataService) {
-        try {
-          setSyncStatus(currentDataService.getSyncStatus());
-        } catch (error) {
-          console.warn("Failed to get sync status:", error);
-        }
-      }
-    }, 5000);
-
-    return () => {
-      clearInterval(syncStatusInterval);
-      // Cleanup when component unmounts
-      if (
-        currentDataService &&
-        typeof currentDataService.cleanup === "function"
-      ) {
-        currentDataService.cleanup();
-      }
-    };
-  }, [initialized, loading]); // Add dependencies to prevent unnecessary re-runs
-
-  const initializeDataService = async () => {
+    initializationAttemptedRef.current = true;
+    
     try {
       setLoading(true);
-      console.log("🔄 Initializing DataService...");
-
-      // Set a flag to prevent repeated initialization attempts
-      if (initialized) {
-        console.log("⏸️ DataService already initialized, skipping...");
-        return;
-      }
+      setError(null);
+      console.log("🔄 [DEBUG] DataServiceContext: Starting initialization...");
 
       try {
-        await dataService.initialize();
-        setCurrentDataService(dataService);
-        console.log("✅ Full DataService initialized successfully");
+        // DIRECTLY USE SIMPLE DATA SERVICE - BYPASS ALL DATABASE ATTEMPTS
+        console.log("🔄 [DEBUG] DataServiceContext: Using SimpleDataService...");
+        await simpleDataService.initialize();
+        setCurrentDataService(simpleDataService);
+        console.log("✅ [DEBUG] SimpleDataService initialized successfully");
       } catch (fullError) {
-        console.warn(
-          "⚠️ Full DataService failed, falling back to SimpleDataService"
-        );
-        console.error("Full DataService error:", fullError);
-
-        try {
-          await simpleDataService.initialize();
-          setCurrentDataService(simpleDataService);
-          console.log("✅ SimpleDataService initialized successfully");
-        } catch (fallbackError) {
-          console.error("❌ Even SimpleDataService failed:", fallbackError);
-          // Still set simpleDataService as it might work for basic operations
-          setCurrentDataService(simpleDataService);
-        }
+        console.error("❌ [DEBUG] SimpleDataService failed:", fullError);
+        throw new Error(`Failed to initialize data service: ${(fullError as Error).message}`);
       }
 
       setInitialized(true);
+      console.log("✅ [DEBUG] DataServiceContext: Marked as initialized");
+      
+      // Initial data load
       await refreshData();
+      console.log("✅ [DEBUG] DataServiceContext: Initialization complete!");
+      
     } catch (error) {
-      console.error("❌ Failed to initialize any DataService:", error);
+      console.error("❌ [DEBUG] Failed to initialize DataService:", error);
+      setError(`Initialization failed: ${(error as Error).message}`);
       setInitialized(true); // Set to true to prevent retry loops
     } finally {
       setLoading(false);
     }
-  };
+  }, [initialized]);
 
-  const refreshData = async () => {
+  // Refresh data with better error handling
+  const refreshData = useCallback(async () => {
     if (!initialized || !currentDataService) {
       console.log("⏸️ Skipping data refresh - service not ready");
       return;
@@ -148,112 +144,170 @@ export function DataServiceProvider({ children }: DataServiceProviderProps) {
 
     try {
       setLoading(true);
+      setError(null);
 
       const [productsData, inventoryData, alertsData, recentSales] =
-        await Promise.all([
-          currentDataService.getProducts().catch((err) => {
-            console.warn("Failed to get products:", err);
-            return [];
-          }),
-          currentDataService.getInventory().catch((err) => {
-            console.warn("Failed to get inventory:", err);
-            return [];
-          }),
-          currentDataService.getInventoryAlerts().catch((err) => {
-            console.warn("Failed to get alerts:", err);
-            return [];
-          }),
-          currentDataService.getSales(50).catch((err) => {
-            console.warn("Failed to get sales:", err);
-            return [];
-          }),
+        await Promise.allSettled([
+          currentDataService.getProducts(),
+          currentDataService.getInventory(),
+          currentDataService.getInventoryAlerts(),
+          currentDataService.getSales(50),
         ]);
 
-      setProducts(productsData);
-      setInventory(inventoryData);
-      setAlerts(alertsData);
-      setSales(recentSales);
+      // Handle products
+      if (productsData.status === 'fulfilled') {
+        setProducts(productsData.value);
+      } else {
+        console.warn("Failed to get products:", productsData.reason);
+        setProducts([]);
+      }
+
+      // Handle inventory
+      if (inventoryData.status === 'fulfilled') {
+        setInventory(inventoryData.value);
+      } else {
+        console.warn("Failed to get inventory:", inventoryData.reason);
+        setInventory([]);
+      }
+
+      // Handle alerts
+      if (alertsData.status === 'fulfilled') {
+        setAlerts(alertsData.value);
+      } else {
+        console.warn("Failed to get alerts:", alertsData.reason);
+        setAlerts([]);
+      }
+
+      // Handle sales
+      if (recentSales.status === 'fulfilled') {
+        setSales(recentSales.value);
+      } else {
+        console.warn("Failed to get sales:", recentSales.reason);
+        setSales([]);
+      }
 
       console.log("✅ Data refreshed successfully:", {
-        products: productsData.length,
-        inventory: inventoryData.length,
-        alerts: alertsData.length,
-        sales: recentSales.length,
+        products: productsData.status === 'fulfilled' ? productsData.value.length : 0,
+        inventory: inventoryData.status === 'fulfilled' ? inventoryData.value.length : 0,
+        alerts: alertsData.status === 'fulfilled' ? alertsData.value.length : 0,
+        sales: recentSales.status === 'fulfilled' ? recentSales.value.length : 0,
       });
     } catch (error) {
       console.error("❌ Failed to refresh data:", error);
+      setError(`Data refresh failed: ${(error as Error).message}`);
     } finally {
       setLoading(false);
     }
-  };
+  }, [initialized, currentDataService]);
 
-  const createProductHandler = async (
+  // Effect for initialization and sync status monitoring
+  useEffect(() => {
+    // Initialize data service
+    initializeDataService();
+
+    // Set up sync status monitoring
+    if (initialized && currentDataService) {
+      syncStatusIntervalRef.current = setInterval(() => {
+        try {
+          setSyncStatus(currentDataService.getSyncStatus());
+        } catch (error) {
+          console.warn("Failed to get sync status:", error);
+        }
+      }, 5000);
+    }
+
+    // Cleanup on unmount
+    return cleanup;
+  }, [initializeDataService, initialized, currentDataService, cleanup]);
+
+  // Product operations
+  const createProductHandler = useCallback(async (
     product: Omit<Product, "id">
   ): Promise<string> => {
     try {
+      console.log("🔄 [DEBUG] CreateProduct: Starting product creation...");
+      setError(null);
+      
+      if (!currentDataService) {
+        throw new Error("No data service available");
+      }
+      
       const productId = await currentDataService.createProduct(product);
-      await refreshData(); // Refresh to show the new product
+      console.log("✅ [DEBUG] CreateProduct: Product created with ID:", productId);
+      
+      // Refresh data to show the new product
+      await refreshData();
+      console.log("✅ [DEBUG] CreateProduct: Data refreshed successfully");
+      
       return productId;
     } catch (error) {
-      console.error("❌ Failed to create product:", error);
+      console.error("❌ [DEBUG] Failed to create product:", error);
+      setError(`Failed to create product: ${(error as Error).message}`);
       throw error;
     }
-  };
+  }, [currentDataService, refreshData]);
 
-  const updateProductHandler = async (
+  const updateProductHandler = useCallback(async (
     id: string,
     updates: Partial<Product>
   ): Promise<void> => {
     try {
+      setError(null);
       await currentDataService.updateProduct(id, updates);
-      await refreshData(); // Refresh to show the updated product
+      await refreshData();
     } catch (error) {
       console.error("❌ Failed to update product:", error);
+      setError(`Failed to update product: ${(error as Error).message}`);
       throw error;
     }
-  };
+  }, [currentDataService, refreshData]);
 
-  const updateInventoryStockHandler = async (
+  const updateInventoryStockHandler = useCallback(async (
     productId: string,
     newQuantity: number,
     reason: string,
     userId?: string
   ): Promise<void> => {
     try {
+      setError(null);
       await currentDataService.updateInventoryStock(
         productId,
         newQuantity,
         reason,
         userId
       );
-      await refreshData(); // Refresh to show the updated inventory
+      await refreshData();
     } catch (error) {
       console.error("❌ Failed to update inventory stock:", error);
+      setError(`Failed to update inventory: ${(error as Error).message}`);
       throw error;
     }
-  };
+  }, [currentDataService, refreshData]);
 
-  const createSaleHandler = async (sale: Omit<Sale, "id">): Promise<string> => {
+  const createSaleHandler = useCallback(async (sale: Omit<Sale, "id">): Promise<string> => {
     try {
+      setError(null);
       const saleId = await currentDataService.createSale(sale);
-      await refreshData(); // Refresh to show updated inventory and new sale
+      await refreshData();
       return saleId;
     } catch (error) {
       console.error("❌ Failed to create sale:", error);
+      setError(`Failed to create sale: ${(error as Error).message}`);
       throw error;
     }
-  };
+  }, [currentDataService, refreshData]);
 
-  const searchProductsHandler = async (query: string): Promise<Product[]> => {
+  // Search operations with error handling
+  const searchProductsHandler = useCallback(async (query: string): Promise<Product[]> => {
     try {
       return await currentDataService.searchProducts(query);
     } catch (error) {
       console.error("❌ Failed to search products:", error);
       return [];
     }
-  };
+  }, [currentDataService]);
 
-  const searchInventoryHandler = async (
+  const searchInventoryHandler = useCallback(async (
     query: string
   ): Promise<InventoryItem[]> => {
     try {
@@ -272,23 +326,26 @@ export function DataServiceProvider({ children }: DataServiceProviderProps) {
       console.error("❌ Failed to search inventory:", error);
       return [];
     }
-  };
+  }, [currentDataService]);
 
-  const forceSyncHandler = async (): Promise<{
+  const forceSyncHandler = useCallback(async (): Promise<{
     success: boolean;
     error?: string;
   }> => {
     try {
+      setError(null);
       const result = await currentDataService.forceSync();
       if (result.success) {
-        await refreshData(); // Refresh data after successful sync
+        await refreshData();
       }
       return result;
     } catch (error) {
       console.error("❌ Failed to force sync:", error);
-      return { success: false, error: "Sync failed" };
+      const errorMessage = `Sync failed: ${(error as Error).message}`;
+      setError(errorMessage);
+      return { success: false, error: errorMessage };
     }
-  };
+  }, [currentDataService, refreshData]);
 
   const contextValue: DataServiceContextType = {
     // State
@@ -299,6 +356,7 @@ export function DataServiceProvider({ children }: DataServiceProviderProps) {
     syncStatus,
     loading,
     initialized,
+    error,
 
     // Actions
     refreshData,
@@ -309,6 +367,7 @@ export function DataServiceProvider({ children }: DataServiceProviderProps) {
     searchProducts: searchProductsHandler,
     searchInventory: searchInventoryHandler,
     forceSync: forceSyncHandler,
+    clearError,
 
     // Data service instance
     dataService: currentDataService,

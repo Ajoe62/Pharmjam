@@ -22,15 +22,19 @@ export class LocalDatabaseService {
 
   async initializeDatabase(): Promise<void> {
     try {
-      console.log("🗄️ Initializing local database...");
+      console.log("🗄️ [DEBUG] LocalDB: Starting database initialization...");
+      console.log("🗄️ [DEBUG] LocalDB: Database name:", this.dbName);
+      console.log("🗄️ [DEBUG] LocalDB: Current db instance:", !!this.db);
 
       // Close any existing database connection first
       if (this.db) {
         try {
+          console.log("🗄️ [DEBUG] LocalDB: Closing existing database connection...");
           await this.db.closeAsync();
+          console.log("✅ [DEBUG] LocalDB: Existing connection closed");
         } catch (error) {
           console.warn(
-            "Warning: Failed to close existing database connection:",
+            "⚠️ [DEBUG] LocalDB: Warning - Failed to close existing database connection:",
             error
           );
         }
@@ -38,17 +42,26 @@ export class LocalDatabaseService {
       }
 
       // Open database connection
+      console.log("🗄️ [DEBUG] LocalDB: Opening database connection...");
       this.db = await SQLite.openDatabaseAsync(this.dbName);
+      console.log("✅ [DEBUG] LocalDB: Database connection opened successfully");
+      console.log("✅ [DEBUG] LocalDB: Database instance:", !!this.db);
 
       // Test the connection with a simple query
+      console.log("🧪 [DEBUG] LocalDB: Testing database connection...");
       await this.db.execAsync("SELECT 1");
+      console.log("✅ [DEBUG] LocalDB: Database connection test successful");
 
       // Create tables
+      console.log("📋 [DEBUG] LocalDB: Creating database tables...");
       await this.createTables();
+      console.log("✅ [DEBUG] LocalDB: Database tables created successfully");
 
-      console.log("✅ Local database initialized successfully");
+      console.log("✅ [DEBUG] LocalDB: Local database initialized successfully");
     } catch (error) {
-      console.error("❌ Failed to initialize local database:", error);
+      console.error("❌ [DEBUG] LocalDB: Failed to initialize local database:", error);
+      console.error("❌ [DEBUG] LocalDB: Error details:", (error as Error).message);
+      console.error("❌ [DEBUG] LocalDB: Error stack:", (error as Error).stack);
       this.db = null;
       throw error;
     }
@@ -60,7 +73,13 @@ export class LocalDatabaseService {
   }
 
   private async createTables(): Promise<void> {
-    if (!this.db) throw new Error("Database not initialized");
+    if (!this.db) {
+      const error = new Error("Database not initialized");
+      console.error("❌ [DEBUG] LocalDB: CreateTables failed - no database instance");
+      throw error;
+    }
+
+    console.log("📋 [DEBUG] LocalDB: Starting table creation...");
 
     const createTablesSQL = `
       -- Products table

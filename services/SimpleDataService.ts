@@ -14,10 +14,15 @@ export class SimpleDataService {
 
   async initialize(): Promise<void> {
     try {
-      console.log("🚀 Initializing Simple Data Service...");
+      console.log("🚀 [DEBUG] SimpleDataService: Starting initialization...");
+      console.log("🚀 [DEBUG] SimpleDataService: Current initialized state:", this.initialized);
 
       // Load sample data
+      console.log("📦 [DEBUG] SimpleDataService: Loading sample products...");
       this.products = [...sampleProducts];
+      console.log("✅ [DEBUG] SimpleDataService: Loaded", this.products.length, "sample products");
+
+      console.log("📦 [DEBUG] SimpleDataService: Creating inventory from products...");
       this.inventory = sampleProducts.map((product) => ({
         ...product,
         productId: product.id,
@@ -29,12 +34,17 @@ export class SimpleDataService {
         reorderPoint: 20,
         costPrice: product.costPrice || product.price * 0.7,
       }));
+      console.log("✅ [DEBUG] SimpleDataService: Created", this.inventory.length, "inventory items");
+
+      console.log("📦 [DEBUG] SimpleDataService: Loading sample sales...");
       this.sales = [...sampleSales];
+      console.log("✅ [DEBUG] SimpleDataService: Loaded", this.sales.length, "sample sales");
 
       this.initialized = true;
-      console.log("✅ Simple Data Service initialized successfully");
+      console.log("✅ [DEBUG] SimpleDataService: Initialization complete, marked as initialized");
     } catch (error) {
-      console.error("❌ Simple Data Service initialization failed:", error);
+      console.error("❌ [DEBUG] SimpleDataService: Initialization failed:", error);
+      console.error("❌ [DEBUG] SimpleDataService: Error stack:", (error as Error).stack);
       throw error;
     }
   }
@@ -62,25 +72,41 @@ export class SimpleDataService {
   }
 
   async createProduct(product: Omit<Product, "id">): Promise<string> {
+    console.log("🔄 [DEBUG] SimpleDataService: Creating product...");
+    console.log("🔄 [DEBUG] SimpleDataService: Initialized state:", this.initialized);
+    console.log("🔄 [DEBUG] SimpleDataService: Product data:", product);
+    
+    if (!this.initialized) {
+      const error = new Error("SimpleDataService not initialized");
+      console.error("❌ [DEBUG] SimpleDataService: Not initialized!");
+      throw error;
+    }
+
     const productId = `prod_${Date.now()}_${Math.random()
       .toString(36)
       .substr(2, 9)}`;
+    console.log("🆔 [DEBUG] SimpleDataService: Generated product ID:", productId);
+    
     const newProduct = { ...product, id: productId };
     this.products.push(newProduct);
+    console.log("✅ [DEBUG] SimpleDataService: Added product to products array, total:", this.products.length);
 
     // Also add to inventory
+    console.log("📦 [DEBUG] SimpleDataService: Adding to inventory...");
     this.inventory.push({
       ...newProduct,
       productId,
-      quantity: 0,
-      stockQuantity: 0,
-      currentStock: 0,
+      quantity: product.stockQuantity || 0,
+      stockQuantity: product.stockQuantity || 0,
+      currentStock: product.stockQuantity || 0,
       minStockLevel: 10,
       minQuantity: 10,
       reorderPoint: 20,
       costPrice: newProduct.costPrice || newProduct.price * 0.7,
     });
+    console.log("✅ [DEBUG] SimpleDataService: Added to inventory, total inventory items:", this.inventory.length);
 
+    console.log("✅ [DEBUG] SimpleDataService: Product creation completed successfully");
     return productId;
   }
 

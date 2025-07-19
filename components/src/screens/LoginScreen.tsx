@@ -97,7 +97,7 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
 
         {/* Main Content */}
         <View style={styles.mainContent}>
-          <Text style={styles.appTitle}>PharmTrack</Text>
+          <Text style={styles.appTitle}>PharmJam</Text>
           <Text style={styles.subtitle}>Pharmacy Management System</Text>
 
           <View style={styles.formContainer}>

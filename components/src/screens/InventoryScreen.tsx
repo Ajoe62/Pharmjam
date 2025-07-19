@@ -25,6 +25,7 @@ import {
 import { formatNaira } from "../../../utils/currency";
 import { RootStackParamList } from "../../../App";
 import { StackNavigationProp } from "@react-navigation/stack";
+import { useDataService } from "../../../contexts/DataServiceContext";
 
 const { width } = Dimensions.get("window");
 
@@ -40,33 +41,44 @@ interface InventoryScreenProps {
 export default function InventoryScreen({ navigation }: InventoryScreenProps) {
   console.log("📦 InventoryScreen: Component rendered");
 
+  // Get data from DataService
+  const { 
+    inventory: dataServiceInventory, 
+    alerts: dataServiceAlerts, 
+    loading, 
+    refreshData, 
+    updateInventoryStock,
+    searchInventory: searchDataInventory 
+  } = useDataService();
+
   // State management
-  const [inventory, setInventory] = useState<InventoryItem[]>(sampleInventory);
-  const [alerts, setAlerts] = useState<InventoryAlert[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [filteredInventory, setFilteredInventory] =
-    useState<InventoryItem[]>(sampleInventory);
+  const [filteredInventory, setFilteredInventory] = useState<InventoryItem[]>([]);
   const [showAlerts, setShowAlerts] = useState(true);
   const [inventoryValue, setInventoryValue] = useState(0);
 
-  // Load data when component mounts
+  // Load data when component mounts or when dataServiceInventory changes
   useEffect(() => {
-    loadInventoryData();
-  }, []);
+    console.log("📦 InventoryScreen: DataService inventory updated:", dataServiceInventory.length);
+    setFilteredInventory(dataServiceInventory);
+    calculateInventoryValueFromData(dataServiceInventory);
+  }, [dataServiceInventory]);
 
   // Update filtered inventory when search query changes
   useEffect(() => {
     if (searchQuery.trim() === "") {
-      setFilteredInventory(inventory);
+      setFilteredInventory(dataServiceInventory);
     } else {
-      setFilteredInventory(searchInventory(searchQuery));
+      // Use DataService search
+      searchDataInventory(searchQuery).then(setFilteredInventory);
     }
-  }, [searchQuery, inventory]);
+  }, [searchQuery, dataServiceInventory, searchDataInventory]);
 
-  const loadInventoryData = () => {
-    console.log("📊 Loading inventory data...");
-    setAlerts(getInventoryAlerts());
-    setInventoryValue(calculateInventoryValue());
+  const calculateInventoryValueFromData = (inventoryData: InventoryItem[]) => {
+    const total = inventoryData.reduce((sum, item) => {
+      return sum + (item.price * item.stockQuantity);
+    }, 0);
+    setInventoryValue(total);
   };
 
   const handleUpdateStock = (
@@ -84,31 +96,27 @@ export default function InventoryScreen({ navigation }: InventoryScreenProps) {
         },
         {
           text: "Update",
-          onPress: (newQuantity) => {
+          onPress: async (newQuantity) => {
             if (newQuantity && !isNaN(Number(newQuantity))) {
               const quantity = Number(newQuantity);
               if (quantity >= 0) {
-                const success = updateStock(
-                  productId,
-                  quantity,
-                  "Manual stock update"
-                );
-                if (success) {
-                  // Update local state
-                  setInventory((prevInventory) =>
-                    prevInventory.map((item) =>
-                      item.id === productId
-                        ? { ...item, stockQuantity: quantity }
-                        : item
-                    )
+                try {
+                  // Use DataService to update stock
+                  await updateInventoryStock(
+                    productId,
+                    quantity,
+                    "Manual stock update"
                   );
                   Alert.alert(
                     "Success",
                     `${productName} stock updated to ${quantity} units`
                   );
-                  loadInventoryData(); // Refresh alerts
-                } else {
-                  Alert.alert("Error", "Failed to update stock");
+                } catch (error) {
+                  console.error("❌ Failed to update stock:", error);
+                  Alert.alert(
+                    "Error",
+                    "Failed to update stock. Please try again."
+                  );
                 }
               } else {
                 Alert.alert("Error", "Quantity must be 0 or greater");
@@ -237,7 +245,23 @@ export default function InventoryScreen({ navigation }: InventoryScreenProps) {
           <Text style={styles.backButtonText}>← Back</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Inventory Management</Text>
-        <View style={{ width: 60 }} />
+        <View style={{ flexDirection: 'row' }}>
+          <TouchableOpacity
+            onPress={refreshData}
+            style={[styles.addButton, { marginRight: 10, backgroundColor: "#007AFF" }]}
+            disabled={loading}
+          >
+            <Text style={styles.addButtonText}>
+              {loading ? "⟳" : "↻"}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => navigation.navigate("AddProduct")}
+            style={styles.addButton}
+          >
+            <Text style={styles.addButtonText}>+ Add</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView
@@ -247,7 +271,7 @@ export default function InventoryScreen({ navigation }: InventoryScreenProps) {
         {/* Summary Cards */}
         <View style={styles.summaryContainer}>
           <View style={styles.summaryCard}>
-            <Text style={styles.summaryValue}>{inventory.length}</Text>
+            <Text style={styles.summaryValue}>{dataServiceInventory.length}</Text>
             <Text style={styles.summaryLabel}>Total Products</Text>
           </View>
 
@@ -260,7 +284,7 @@ export default function InventoryScreen({ navigation }: InventoryScreenProps) {
 
           <View style={styles.summaryCard}>
             <Text style={[styles.summaryValue, { color: "#FF3B30" }]}>
-              {alerts.length}
+              {dataServiceAlerts.length}
             </Text>
             <Text style={styles.summaryLabel}>Active Alerts</Text>
           </View>
@@ -278,7 +302,7 @@ export default function InventoryScreen({ navigation }: InventoryScreenProps) {
         </View>
 
         {/* Alerts Section */}
-        {showAlerts && alerts.length > 0 && (
+        {showAlerts && dataServiceAlerts.length > 0 && (
           <View style={styles.alertsSection}>
             <View style={styles.alertsHeader}>
               <Text style={styles.sectionTitle}>⚠️ Inventory Alerts</Text>
@@ -288,15 +312,15 @@ export default function InventoryScreen({ navigation }: InventoryScreenProps) {
             </View>
 
             <FlatList
-              data={alerts.slice(0, 3)} // Show only first 3 alerts
+              data={dataServiceAlerts.slice(0, 3)} // Show only first 3 alerts
               renderItem={renderAlert}
               keyExtractor={(item) => item.id}
               scrollEnabled={false}
             />
 
-            {alerts.length > 3 && (
+            {dataServiceAlerts.length > 3 && (
               <Text style={styles.moreAlertsText}>
-                +{alerts.length - 3} more alerts
+                +{dataServiceAlerts.length - 3} more alerts
               </Text>
             )}
           </View>
@@ -523,6 +547,17 @@ const styles = StyleSheet.create({
   updateButtonText: {
     color: "#FFFFFF",
     fontSize: 12,
+    fontWeight: "600",
+  },
+  addButton: {
+    backgroundColor: "#00D4AA",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 6,
+  },
+  addButtonText: {
+    color: "#FFFFFF",
+    fontSize: 14,
     fontWeight: "600",
   },
 });

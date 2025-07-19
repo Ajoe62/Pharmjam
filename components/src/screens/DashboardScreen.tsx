@@ -74,8 +74,8 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps) {
   };
 
   const handleAddInventory = () => {
-    Alert.alert("Action", "Add Inventory functionality will be implemented");
-    // navigation.navigate('AddInventory');
+    console.log("➕ Navigating to Add Product");
+    navigation.navigate("AddProduct");
   };
 
   const handleFlagSale = () => {

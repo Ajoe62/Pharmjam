@@ -28,6 +28,7 @@ import SettingsScreen from "./components/src/screens/SettingsScreen";
 import NotificationsScreen from "./components/src/screens/NotificationsScreen";
 import SystemStatusScreen from "./components/src/screens/SystemStatusScreen";
 import DataExportScreen from "./components/src/screens/DataExportScreen";
+import AddProductScreen from "./components/src/screens/AddProductScreen";
 import DataServiceDemo from "./components/DataServiceDemo";
 
 // Additional screens that DashboardScreen navigates to
@@ -62,6 +63,7 @@ export type RootStackParamList = {
   DataServiceDemo: undefined;
   VerifyDrug: undefined;
   AddInventory: undefined;
+  AddProduct: undefined;
   FlagSale: undefined;
 };
 
@@ -142,6 +144,10 @@ export default function App() {
                   <Stack.Screen
                     name="DataServiceDemo"
                     component={DataServiceDemo}
+                  />
+                  <Stack.Screen
+                    name="AddProduct"
+                    component={AddProductScreen}
                   />
 
                   {/* Additional screens that DashboardScreen navigates to */}
